@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
+import P2PConnect from '@/components/P2PConnect';
 import {
   Form,
   FormField,
@@ -500,6 +501,10 @@ export default function ChatPage() {
         <div className="ml-3 flex-1">
           <h2 className="font-medium text-foreground">{otherParticipantDetails.displayName}</h2>
         </div>
+        
+        {/* P2P Connection Button */}
+        <P2PConnect userId={otherParticipantId} />
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon">

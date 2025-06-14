@@ -5,6 +5,8 @@ import useLocalStorage from '@/hooks/useLocalStorage';
 import type { UserProfile, PairedUser, Chat, Message, AppState } from '@/types';
 import { DEFAULT_AVATAR_SVG_DATA_URI } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import * as socketService from '@/lib/socket';
+import * as p2pService from '@/lib/p2p';
 
 interface AppContextType extends AppState {
   setUserProfile: (profile: UserProfile | null) => void;
@@ -285,6 +287,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Ensure new messages have a status, defaulting to 'sent'
     const messageWithStatus = { ...message, status: message.status || 'sent' };
 
+    // Send message via socket.io if it's outgoing (from current user)
+    if (userProfile && message.senderId === userProfile.userId) {
+      // Try P2P first if connected
+      const isPeerConnected = p2pService.isConnectedToPeer(message.receiverId);
+      
+      if (isPeerConnected) {
+        // Send message via P2P connection
+        const sent = p2pService.sendDirectMessage(messageWithStatus);
+        if (!sent) {
+          // Fallback to socket if P2P fails
+          socketService.sendPrivateMessage(messageWithStatus);
+        }
+      } else {
+        // No P2P connection, use socket
+        socketService.sendPrivateMessage(messageWithStatus);
+      }
+    }
+    
     // Do a direct write to localStorage first for maximum reliability
     try {
       // Get current messages directly from storage
@@ -555,6 +575,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
     };
     
+    // Send via socket to all other users
+    socketService.broadcastAnnouncement(title, content, true);
+    
+    // Also broadcast via P2P if any peers are connected
+    p2pService.broadcastAnnouncement(newAnnouncement);
+    
     setAnnouncementsState(prev => [newAnnouncement, ...prev]);
   }, [setAnnouncementsState]);
 
@@ -607,6 +633,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [isInitialized, userProfile, pairedUsers]);
+  
+  // Initialize WebSocket connection when user profile is set
+  useEffect(() => {
+    if (userProfile) {
+      // Initialize socket connection
+      socketService.initializeSocket(userProfile.userId)
+        .then(connected => {
+          console.log(connected ? 'WebSocket connected' : 'WebSocket connection failed');
+        });
+      
+      // Initialize P2P
+      p2pService.initializeP2P(userProfile.userId);
+      
+      // Set up WebSocket message handlers
+      const socketMessageHandler = socketService.onNewMessage((message) => {
+        // Add received message to our local state
+        addMessage(message);
+      });
+      
+      const socketAnnouncementHandler = socketService.onNewAnnouncement((announcement) => {
+        // Add received announcement to our local state
+        setAnnouncementsState(prev => [announcement, ...prev]);
+      });
+      
+      const socketStatusHandler = socketService.onMessageStatusUpdate((update) => {
+        // Update message status
+        updateMessageStatus(update.chatId, update.messageId, update.status);
+      });
+      
+      // Set up P2P message handlers
+      const p2pMessageHandler = p2pService.onDirectMessage((message) => {
+        // Add received message to our local state
+        addMessage(message);
+      });
+      
+      const p2pAnnouncementHandler = p2pService.onAnnouncement((announcement) => {
+        // Add received announcement to our local state
+        setAnnouncementsState(prev => [announcement, ...prev]);
+      });
+      
+      // Clean up handlers when component unmounts or user changes
+      return () => {
+        // WebSocket handlers
+        socketMessageHandler();
+        socketAnnouncementHandler();
+        socketStatusHandler();
+        socketService.disconnectSocket();
+        
+        // P2P handlers
+        p2pMessageHandler();
+        p2pAnnouncementHandler();
+        p2pService.disconnectAll();
+      };
+    }
+  }, [userProfile, addMessage, updateMessageStatus, setAnnouncementsState]);
 
   const value: AppContextType = {
     userProfile,
