@@ -106,6 +106,10 @@ export default function InvitePage() {
       if (pairedUsers.find(u => u.userId === invitedUserId)) {
         toast({ title: "Already Paired", description: "You are already paired with this user.", variant: "default" });
         acceptInviteForm.reset();
+        
+        // Instead of just showing a message, navigate to the existing chat
+        const existingChat = createOrGetChat(invitedUserId, "User");
+        router.push(`/chat/messages/${existingChat.chatId}`);
         return;
       }
       
@@ -137,7 +141,11 @@ export default function InvitePage() {
       
       toast({ title: "Successfully Paired!", description: `You are now connected with ${newPairedUser.displayName}.` });
       acceptInviteForm.reset();
-      router.push(`/chat/messages/${chat.chatId}`); // Navigate to the new chat
+      
+      // Navigate to the new chat
+      setTimeout(() => {
+        router.push(`/chat/messages/${chat.chatId}`);
+      }, 500);
 
     } catch (error) {
       let message = "Failed to process invite link.";
@@ -233,7 +241,13 @@ export default function InvitePage() {
                   const displayUserName = user.localDisplayName || user.displayName;
                   return (
                   <li key={user.userId} className="flex items-center justify-between p-3 bg-muted/30 rounded-md hover:bg-muted/60">
-                    <div className="flex items-center space-x-3">
+                    <div 
+                      className="flex items-center space-x-3 cursor-pointer flex-grow"
+                      onClick={() => {
+                        const chat = createOrGetChat(user.userId, displayUserName, user.avatar);
+                        router.push(`/chat/messages/${chat.chatId}`);
+                      }}
+                    >
                        <Avatar className="h-10 w-10">
                          <AvatarImage src={user.avatar} alt={displayUserName} />
                          <AvatarFallback>{displayUserName.substring(0,2).toUpperCase()}</AvatarFallback>

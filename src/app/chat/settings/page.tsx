@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect } from 'react';
@@ -68,7 +67,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 md:p-6 space-y-6">
+    <div className="h-full flex flex-col p-4 md:p-6 space-y-6 overflow-y-auto pb-20">
       <header className="pb-4 border-b">
         <h1 className="text-2xl font-headline font-semibold flex items-center">
           <SettingsIcon className="mr-3 text-primary" />Settings

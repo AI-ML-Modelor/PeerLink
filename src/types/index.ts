@@ -23,6 +23,7 @@ export interface Chat {
   participantDetails: {
     [userId: string]: { displayName: string, avatar: string };
   };
+  isPending?: boolean; // Indicates if this is a placeholder chat with no messages yet
 }
 
 export interface MessageFile {
@@ -43,6 +44,7 @@ export interface Message {
   edited?: boolean; // Indicates if the message has been edited
   deletedForMe?: boolean; // Indicates if the message is deleted for the current user only
   deletedForEveryone?: boolean; // Indicates if the message is deleted for all participants
+  replyToId?: string; // ID of the message this is replying to, if applicable
 }
 
 export interface AppState {

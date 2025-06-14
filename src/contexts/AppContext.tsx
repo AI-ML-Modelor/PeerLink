@@ -62,7 +62,7 @@ const initialState: AppState = {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfileState] = useLocalStorage<UserProfile | null>('peerlink-userProfile', initialState.userProfile);
   const [pairedUsers, setPairedUsersState] = useLocalStorage<PairedUser[]>('peerlink-pairedUsers', initialState.pairedUsers);
-  const [chats, setChatsState] = useLocalStorage<Chat[]>('peerlink-chats', initialState.chats);
+  const [chatsState, setChatsState] = useLocalStorage<Chat[]>('peerlink-chats', initialState.chats);
   const [messages, setMessagesState] = useLocalStorage<Record<string, Message[]>>('peerlink-messages', initialState.messages);
   const [announcements, setAnnouncementsState] = useLocalStorage<Announcement[]>('peerlink-announcements', initialState.announcements);
   const [invites, setInvitesState] = useLocalStorage<Invite[]>('peerlink-invites', initialState.invites);
@@ -161,77 +161,265 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [setPairedUsersState, setChatsState]);
 
-  const createOrGetChat = useCallback((participantId: string, participantDisplayName: string, participantAvatarArg?: string): Chat => {
-    if (!userProfile) throw new Error("User profile not set");
+  const createOrGetChat = useCallback((otherUserId: string, otherUserDisplayName: string, otherUserAvatar?: string) => {
+    if (!userProfile) throw new Error("User profile is not initialized");
 
-    const sortedParticipantIds: [string, string] = [userProfile.userId, participantId].sort() as [string, string];
+    const sortedParticipantIds = [userProfile.userId, otherUserId].sort() as [string, string];
     const chatId = sortedParticipantIds.join('_');
     
-    const pairedParticipantFromList = pairedUsers.find(p => p.userId === participantId);
-    const effectiveParticipantDisplayName = pairedParticipantFromList?.localDisplayName || pairedParticipantFromList?.displayName || participantDisplayName;
-    const effectiveParticipantAvatar = pairedParticipantFromList?.avatar || participantAvatarArg || DEFAULT_AVATAR_SVG_DATA_URI;
-
-    let existingChat = chats.find(c => c.chatId === chatId);
-
-    if (existingChat) {
-      let detailsChanged = false;
-      const updatedParticipantDetails = {...existingChat.participantDetails};
-
-      // Check and update current user's details in the chat
-      if (updatedParticipantDetails[userProfile.userId]?.displayName !== userProfile.displayName || 
-          updatedParticipantDetails[userProfile.userId]?.avatar !== userProfile.avatar) {
-        updatedParticipantDetails[userProfile.userId] = { displayName: userProfile.displayName, avatar: userProfile.avatar };
-        detailsChanged = true;
+    // First check if this chat already exists in state
+    const existingChat = chatsState.find(chat => chat.chatId === chatId);
+    
+    // Also double check in localStorage directly as a safety measure
+    let existingChatFromStorage: Chat | undefined;
+    try {
+      const storedChats = localStorage.getItem('peerlink-chats');
+      if (storedChats) {
+        const parsedChats = JSON.parse(storedChats) as Chat[];
+        existingChatFromStorage = parsedChats.find(chat => chat.chatId === chatId);
       }
-      // Check and update other participant's details in the chat
-      if (updatedParticipantDetails[participantId]?.displayName !== effectiveParticipantDisplayName ||
-          updatedParticipantDetails[participantId]?.avatar !== effectiveParticipantAvatar) {
-        updatedParticipantDetails[participantId] = { displayName: effectiveParticipantDisplayName, avatar: effectiveParticipantAvatar };
-        detailsChanged = true;
-      }
-
-      if (detailsChanged) {
-        existingChat = { ...existingChat, participantDetails: updatedParticipantDetails };
-        setChatsState(prev => prev.map(c => c.chatId === chatId ? existingChat! : c));
-      }
-      return existingChat;
+    } catch (error) {
+      console.error("Error checking localStorage for existing chat:", error);
     }
-
-    const newChat: Chat = {
+    
+    // If it exists in either place, update it
+    if (existingChat || existingChatFromStorage) {
+      // Use either the state or storage version
+      const chatToUpdate = existingChat || existingChatFromStorage!;
+      
+      // Update the chat to make sure it's not pending anymore
+      setChatsState(prevChats => {
+        // First check if we need to add this chat that was only in storage
+        if (!existingChat && existingChatFromStorage) {
+          const updatedChats = [...prevChats, { ...existingChatFromStorage, isPending: false }];
+          try {
+            localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+            sessionStorage.setItem('peerlink-chats-backup', JSON.stringify(updatedChats));
+          } catch (error) {
+            console.error("Error saving chats during update:", error);
+          }
+          return updatedChats;
+        }
+        
+        // Otherwise just update the existing chat
+        const updatedChats = prevChats.map(chat => {
+          if (chat.chatId === chatId) {
+            // Ensure the chat is not marked as pending
+            return { ...chat, isPending: false };
+          }
+          return chat;
+        });
+        
+        // Force save immediately to localStorage
+        try {
+          localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+          sessionStorage.setItem('peerlink-chats-backup', JSON.stringify(updatedChats));
+        } catch (error) {
+          console.error("Error saving chats during update:", error);
+        }
+        
+        return updatedChats;
+      });
+      
+      return chatToUpdate;
+    }
+    
+    // If it doesn't exist, create a new chat
+    const newChat = {
       chatId,
       participants: sortedParticipantIds,
       participantDetails: {
-        [userProfile.userId]: { displayName: userProfile.displayName, avatar: userProfile.avatar },
-        [participantId]: { displayName: effectiveParticipantDisplayName, avatar: effectiveParticipantAvatar },
+        [userProfile.userId]: {
+          displayName: userProfile.displayName,
+          avatar: userProfile.avatar
+        },
+        [otherUserId]: {
+          displayName: otherUserDisplayName,
+          avatar: otherUserAvatar || ''
+        }
       },
       unreadCount: 0,
+      isPending: false // Not pending, it's been explicitly created
     };
-    setChatsState(prev => [...prev, newChat]);
+    
+    // Update state with the new chat
+    setChatsState(prevChats => {
+      const updatedChats = [...prevChats, newChat];
+      
+      // Force save immediately to localStorage
+      try {
+        localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+        sessionStorage.setItem('peerlink-chats-backup', JSON.stringify(updatedChats));
+      } catch (error) {
+        console.error("Error saving chats during creation:", error);
+      }
+      
+      return updatedChats;
+    });
+    
+    // Ensure there's an empty messages state for this chat ID
+    setMessagesState(prevMessages => {
+      if (!prevMessages[chatId]) {
+        const updatedMessages = {
+          ...prevMessages,
+          [chatId]: []
+        };
+        
+        // Force save immediately
+        try {
+          localStorage.setItem('peerlink-messages', JSON.stringify(updatedMessages));
+          sessionStorage.setItem('peerlink-messages-backup', JSON.stringify(updatedMessages));
+        } catch (error) {
+          console.error("Error initializing messages for new chat:", error);
+        }
+        
+        return updatedMessages;
+      }
+      return prevMessages;
+    });
+    
     return newChat;
-  }, [userProfile, chats, pairedUsers, setChatsState]);
+  }, [userProfile, chatsState, setChatsState, setMessagesState]);
   
   const addMessage = useCallback((message: Message) => {
     // Ensure new messages have a status, defaulting to 'sent'
     const messageWithStatus = { ...message, status: message.status || 'sent' };
 
+    // Do a direct write to localStorage first for maximum reliability
+    try {
+      // Get current messages directly from storage
+      const storedMessagesStr = localStorage.getItem('peerlink-messages') || '{}';
+      const storedMessages = JSON.parse(storedMessagesStr);
+      
+      const chatId = messageWithStatus.chatId;
+      const chatMessages = storedMessages[chatId] || [];
+      
+      // Check if this message already exists to avoid duplicates
+      const messageExists = chatMessages.some((m: Message) => m.messageId === messageWithStatus.messageId);
+      if (!messageExists) {
+        // Add the message and persist immediately
+        const updatedChatMessages = [...chatMessages, messageWithStatus];
+        storedMessages[chatId] = updatedChatMessages;
+        
+        localStorage.setItem('peerlink-messages', JSON.stringify(storedMessages));
+        sessionStorage.setItem('peerlink-messages-backup', JSON.stringify(storedMessages));
+      }
+    } catch (error) {
+      console.error("Error with direct localStorage write:", error);
+    }
+
+    // Then update the state
     setMessagesState(prev => {
       const chatMessages = prev[messageWithStatus.chatId] || [];
-      return { ...prev, [messageWithStatus.chatId]: [...chatMessages, messageWithStatus] };
-    });
-    setChatsState(prevChats => prevChats.map(chat => {
-      if (chat.chatId === messageWithStatus.chatId) {
-        let newUnreadCount = chat.unreadCount;
-        // Only increment unread count if the message is from another user
-        // and the chat is not currently "active" (this part would require more logic for active chat tracking)
-        // For now, assume if sender is not current user, it's unread.
-        if (messageWithStatus.senderId !== userProfile?.userId) {
-          newUnreadCount = (chat.unreadCount || 0) + 1;
-        }
-        return { ...chat, lastMessage: messageWithStatus, unreadCount: newUnreadCount };
+      
+      // Check if this message already exists to avoid duplicates
+      const messageExists = chatMessages.some(m => m.messageId === messageWithStatus.messageId);
+      if (messageExists) {
+        return prev; // No changes needed
       }
-      return chat;
-    }));
-  }, [setMessagesState, setChatsState, userProfile]);
+      
+      const newMessages = { 
+        ...prev, 
+        [messageWithStatus.chatId]: [...chatMessages, messageWithStatus] 
+      };
+      
+      // Force save to localStorage to prevent message loss
+      try {
+        localStorage.setItem('peerlink-messages', JSON.stringify(newMessages));
+        
+        // Backup to sessionStorage as well for redundancy
+        sessionStorage.setItem('peerlink-messages-backup', JSON.stringify(newMessages));
+      } catch (error) {
+        console.error("Error saving messages to storage:", error);
+      }
+      
+      return newMessages;
+    });
+    
+    // Update chat metadata
+    setChatsState(prevChats => {
+      const updatedChats = prevChats.map(chat => {
+        if (chat.chatId === messageWithStatus.chatId) {
+          let newUnreadCount = chat.unreadCount;
+          // Only increment unread count if the message is from another user
+          if (messageWithStatus.senderId !== userProfile?.userId) {
+            newUnreadCount = (chat.unreadCount || 0) + 1;
+            
+            // Trigger system notification if supported
+            try {
+              if ("Notification" in window && Notification.permission === "granted") {
+                const pairedUser = pairedUsers.find(p => p.userId === messageWithStatus.senderId);
+                const senderName = pairedUser?.localDisplayName || 
+                                  pairedUser?.displayName || 
+                                  "User " + messageWithStatus.senderId.substring(0, 6);
+                                  
+                new Notification("New message from " + senderName, {
+                  body: messageWithStatus.text.substring(0, 60) + (messageWithStatus.text.length > 60 ? "..." : ""),
+                  icon: "/icons/icon-192x192.png",
+                  tag: chat.chatId // Group by chat
+                });
+              } else if ("Notification" in window && Notification.permission !== "denied") {
+                // Request permission if not explicitly denied
+                Notification.requestPermission();
+              }
+            } catch (e) {
+              console.log("Notification API not supported or permission denied");
+            }
+          }
+          
+          const updatedChat = { 
+            ...chat, 
+            lastMessage: messageWithStatus, 
+            unreadCount: newUnreadCount,
+            isPending: false // When a message is sent, the chat is no longer pending
+          };
+          
+          return updatedChat;
+        }
+        return chat;
+      });
+      
+      // Force save to localStorage to prevent chat metadata loss
+      try {
+        localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+        
+        // Backup to sessionStorage as well
+        sessionStorage.setItem('peerlink-chats-backup', JSON.stringify(updatedChats));
+      } catch (error) {
+        console.error("Error saving chats to storage:", error);
+      }
+      
+      return updatedChats;
+    });
+  }, [setMessagesState, setChatsState, userProfile, pairedUsers]);
+
+  // Recovery function to restore lost messages from backup
+  useEffect(() => {
+    if (isInitialized) {
+      try {
+        // Check if we have messages in localStorage
+        const storedMessages = localStorage.getItem('peerlink-messages');
+        const backupMessages = sessionStorage.getItem('peerlink-messages-backup');
+        
+        // If localStorage messages are missing but we have backup, restore from backup
+        if (!storedMessages && backupMessages) {
+          localStorage.setItem('peerlink-messages', backupMessages);
+          setMessagesState(JSON.parse(backupMessages));
+        }
+        
+        // Same for chats
+        const storedChats = localStorage.getItem('peerlink-chats');
+        const backupChats = sessionStorage.getItem('peerlink-chats-backup');
+        
+        if (!storedChats && backupChats) {
+          localStorage.setItem('peerlink-chats', backupChats);
+          setChatsState(JSON.parse(backupChats));
+        }
+      } catch (error) {
+        console.error("Error during storage recovery check:", error);
+      }
+    }
+  }, [isInitialized, setMessagesState, setChatsState]);
 
   const updateMessageStatus = useCallback((chatId: string, messageId: string, status: Message['status']) => {
     setMessagesState(prev => {
@@ -255,8 +443,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [messages]);
 
   const getChatById = useCallback((chatId: string): Chat | undefined => {
-    return chats.find(c => c.chatId === chatId);
-  }, [chats]);
+    return chatsState.find(c => c.chatId === chatId);
+  }, [chatsState]);
 
   const markChatAsRead = useCallback((chatId: string) => {
     setChatsState(prevChats => prevChats.map(chat =>
@@ -384,10 +572,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [setAnnouncementsState]);
 
+  // This effect creates chats for all paired users when the app initializes or when paired users change
+  useEffect(() => {
+    // Only run after initialization and when we have user profile and paired users
+    if (isInitialized && userProfile && pairedUsers.length > 0) {
+      pairedUsers.forEach(pairedUser => {
+        // Skip if we're still initializing
+        if (!isInitialized) return;
+        
+        const sortedParticipantIds: [string, string] = [userProfile.userId, pairedUser.userId].sort() as [string, string];
+        const chatId = sortedParticipantIds.join('_');
+        
+        const existingChat = chatsState.find(chat => chat.chatId === chatId);
+        if (!existingChat) {
+          const displayName = pairedUser.localDisplayName || pairedUser.displayName;
+          // Create chat entry for this paired user
+          const newChat: Chat = {
+            chatId,
+            participants: sortedParticipantIds,
+            participantDetails: {
+              [userProfile.userId]: { displayName: userProfile.displayName, avatar: userProfile.avatar },
+              [pairedUser.userId]: { displayName: displayName, avatar: pairedUser.avatar },
+            },
+            unreadCount: 0,
+            isPending: true
+          };
+          
+          setChatsState(prev => {
+            const updatedChats = [...prev, newChat];
+            localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+            return updatedChats;
+          });
+        }
+      });
+    }
+  }, [isInitialized, userProfile, pairedUsers]);
+
   const value: AppContextType = {
     userProfile,
     pairedUsers,
-    chats,
+    chats: chatsState,
     messages,
     announcements,
     invites,

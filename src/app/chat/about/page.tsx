@@ -132,7 +132,7 @@ export default function AboutPage() {
 
   return (
     <div
-      className={`h-full flex flex-col p-4 md:p-6 space-y-6 transition-opacity duration-500 ease-in-out ${
+      className={`h-full flex flex-col p-4 md:p-6 space-y-6 overflow-y-auto pb-20 transition-opacity duration-500 ease-in-out ${
         isVisible ? 'opacity-100' : 'opacity-0 translate-y-2'
       }`}
     >

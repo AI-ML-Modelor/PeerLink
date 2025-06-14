@@ -6,7 +6,7 @@ import { useAppContext } from '@/contexts/AppContext';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Zap, Search, MessageSquare } from 'lucide-react';
+import { Zap, Search, MessageSquare, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 export default function ChatListPage() {
   const router = useRouter();
-  const { userProfile, chats, pairedUsers, isInitialized } = useAppContext();
+  const { userProfile, chats, pairedUsers, isInitialized, createOrGetChat } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [isVisible, setIsVisible] = useState(false);
 
@@ -31,6 +31,70 @@ export default function ChatListPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  const handleChatClick = (chatId: string, participantId?: string) => {
+    // If we have a chat ID, navigate directly using location.href for forced navigation
+    if (chatId) {
+      window.location.href = `/chat/messages/${chatId}`;
+      return;
+    }
+    
+    // If no chatId but we have a participantId, create the chat first
+    if (participantId && userProfile) {
+      // Find the paired user to get their display name
+      const pairedUser = pairedUsers.find(user => user.userId === participantId);
+      const displayName = pairedUser?.localDisplayName || pairedUser?.displayName || `User ${participantId.substring(0, 6)}`;
+      
+      // Create or get the chat
+      const chat = createOrGetChat(participantId, displayName, pairedUser?.avatar);
+      
+      // Navigate to the new chat using location.href for forced navigation
+      window.location.href = `/chat/messages/${chat.chatId}`;
+    }
+  };
+
+  // Create a combined list of chat items (both active chats and paired users)
+  const createCombinedChatList = () => {
+    if (!userProfile) return [];
+    
+    // First, collect all chats
+    let chatList = [...chats];
+    
+    // For each paired user, check if a chat already exists
+    pairedUsers.forEach(user => {
+      const userId = user.userId;
+      const existingChat = chats.find(chat => 
+        chat.participants.includes(userId) && chat.participants.includes(userProfile.userId)
+      );
+      
+      // If no chat exists for this paired user, create a placeholder chat item
+      if (!existingChat) {
+        const sortedParticipantIds = [userProfile.userId, userId].sort() as [string, string];
+        const chatId = sortedParticipantIds.join('_');
+        
+        const newChat = {
+          chatId,
+          participants: sortedParticipantIds,
+          participantDetails: {
+            [userProfile.userId]: { 
+              displayName: userProfile.displayName, 
+              avatar: userProfile.avatar 
+            },
+            [userId]: { 
+              displayName: user.localDisplayName || user.displayName, 
+              avatar: user.avatar 
+            }
+          },
+          unreadCount: 0,
+          isPending: true // Mark this as a pending chat (no messages yet)
+        };
+        
+        chatList.push(newChat);
+      }
+    });
+    
+    return chatList;
+  };
+  
   if (!isInitialized) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -39,9 +103,11 @@ export default function ChatListPage() {
     );
   }
 
+  // Get the combined list of chats and paired users
+  const allChats = createCombinedChatList();
+  
   // Filter chats based on search query
-  const filteredChats = chats.filter(chat => {
-    // Find the other participant in the chat
+  const filteredChats = allChats.filter(chat => {
     if (!userProfile) return false;
     
     const otherParticipantId = chat.participants.find(id => id !== userProfile.userId);
@@ -96,17 +162,19 @@ export default function ChatListPage() {
             if (!otherParticipant) return null;
             
             const pairedUser = pairedUsers.find(user => user.userId === otherParticipantId);
-            const displayName = pairedUser?.localDisplayName || otherParticipant.displayName;
+            const displayName = pairedUser?.localDisplayName || pairedUser?.displayName || otherParticipant.displayName;
+            const isPendingChat = chat.isPending;
 
             return (
-              <Link 
+              <div 
                 key={chat.chatId}
-                href={`/chat/messages/${chat.chatId}`}
                 className="block"
+                onClick={() => handleChatClick(chat.chatId, otherParticipantId)}
               >
                 <Card className={cn(
                   "p-4 flex items-center hover:bg-accent/50 transition-colors cursor-pointer",
-                  chat.unreadCount ? "bg-accent/20" : ""
+                  chat.unreadCount ? "bg-accent/20" : "",
+                  isPendingChat ? "border-dashed" : ""
                 )}>
                   <div className="relative">
                     <Avatar className="h-12 w-12 mr-4">
@@ -114,13 +182,13 @@ export default function ChatListPage() {
                       <AvatarFallback>{displayName.substring(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     {chat.unreadCount ? (
-                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                      <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-semibold shadow-md animate-pulse">
                         {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
                       </span>
                     ) : null}
                   </div>
                   
-                  <div className="flex-1 min-w-0"> {/* min-width ensures proper truncation */}
+                  <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline">
                       <h3 className="font-medium truncate">{displayName}</h3>
                       <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
@@ -130,15 +198,20 @@ export default function ChatListPage() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">
-                      {chat.lastMessage 
-                        ? (chat.lastMessage.deletedForEveryone 
-                            ? "This message was deleted" 
-                            : chat.lastMessage.text)
-                        : "No messages yet"}
+                      {isPendingChat ? (
+                        <span className="flex items-center gap-1 text-accent">
+                          <UserPlus className="h-3.5 w-3.5" />
+                          Start a conversation
+                        </span>
+                      ) : chat.lastMessage ? (
+                        chat.lastMessage.deletedForEveryone 
+                          ? "This message was deleted" 
+                          : chat.lastMessage.text
+                      ) : "No messages yet"}
                     </p>
                   </div>
                 </Card>
-              </Link>
+              </div>
             );
           })
         )}

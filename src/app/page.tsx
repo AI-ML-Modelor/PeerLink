@@ -12,12 +12,12 @@ export default function HomePage() {
   useEffect(() => {
     if (isInitialized) {
       if (userProfile) {
-        router.replace('/chat');
+        window.location.href = '/chat';
       } else {
-        router.replace('/onboarding');
+        window.location.href = '/onboarding';
       }
     }
-  }, [isInitialized, userProfile, router]);
+  }, [isInitialized, userProfile]);
 
   return (
     <div className="flex items-center justify-center h-screen">
