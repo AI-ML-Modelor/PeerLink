@@ -41,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import * as p2pService from '@/lib/p2p';
 
 // Add this new component to handle automatic recovery
 const ChatRecovery = ({ chatId }: { chatId: string }) => {
@@ -363,14 +364,26 @@ export default function ChatPage() {
       console.error("Error adding message directly to localStorage:", error);
     }
 
-    // Simulate message delivery and read receipts for demo purposes
-    setTimeout(() => {
+    // Try to send the message via P2P if connected to this peer
+    const sentViaP2P = p2pService.sendDirectMessage(newMessage);
+    
+    if (sentViaP2P) {
+      console.log('Message sent via P2P connection');
+      // Update status faster when using P2P
       updateMessageStatus(chat.chatId, newMessage.messageId, 'delivered');
-    }, 1000);
-    setTimeout(() => {
-      // Simulate read only for demo
-      updateMessageStatus(chat.chatId, newMessage.messageId, 'read');
-    }, 2500);
+      setTimeout(() => {
+        updateMessageStatus(chat.chatId, newMessage.messageId, 'read');
+      }, 1000);
+    } else {
+      console.log('Falling back to server for message delivery');
+      // Simulate message delivery and read receipts for server-based messaging
+      setTimeout(() => {
+        updateMessageStatus(chat.chatId, newMessage.messageId, 'delivered');
+      }, 1000);
+      setTimeout(() => {
+        updateMessageStatus(chat.chatId, newMessage.messageId, 'read');
+      }, 2500);
+    }
   };
   
   const handleClearChat = () => {

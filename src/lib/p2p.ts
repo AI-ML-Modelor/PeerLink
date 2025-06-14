@@ -318,4 +318,33 @@ export function disconnectAll(): void {
     }
   }
   connections.clear();
+}
+
+// Disconnect a specific peer
+export function disconnectPeer(userId: string): boolean {
+  for (const [connId, conn] of connections.entries()) {
+    if (conn.userId === userId) {
+      try {
+        if (conn.dataChannel) {
+          conn.dataChannel.close();
+        }
+        conn.connection.close();
+        connections.delete(connId);
+        
+        // Notify connection handlers about disconnection
+        connectionHandlers.forEach(h => h({ 
+          userId: conn.userId, 
+          connected: false 
+        }));
+        
+        console.log(`Disconnected from peer: ${userId}`);
+        return true;
+      } catch (err) {
+        console.error(`Error disconnecting from peer ${userId}:`, err);
+        errorHandlers.forEach(h => h(err instanceof Error ? err : new Error(String(err))));
+        return false;
+      }
+    }
+  }
+  return false; // Peer not found
 } 

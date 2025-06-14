@@ -57,6 +57,34 @@ export default function P2PConnect({ userId }: P2PConnectProps) {
     };
   }, [userProfile, toast]);
 
+  // Auto-connect if userId is provided
+  useEffect(() => {
+    if (userProfile && userId && !isConnected && !p2pService.isConnectedToPeer(userId)) {
+      // Check if we're already connected to this peer
+      const autoConnectPeer = async () => {
+        try {
+          console.log(`Attempting automatic P2P connection to: ${userId}`);
+          setIsConnecting(true);
+          
+          // Try to create a connection offer
+          const offerData = await p2pService.createConnectionOffer();
+          setConnectionData(offerData);
+          
+          // Store connection data for later use in dialog
+          setConnectionData(offerData);
+          
+          // For a real implementation in a production app, we would use a signaling server
+          // to exchange connection data between peers automatically
+        } catch (err) {
+          console.error("Auto-connect error:", err);
+          setIsConnecting(false);
+        }
+      };
+      
+      autoConnectPeer();
+    }
+  }, [userProfile, userId, isConnected]);
+
   // Create connection handler
   const handleCreateConnection = async () => {
     setIsConnecting(true);

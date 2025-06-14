@@ -134,10 +134,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [setPairedUsersState, userProfile, addInvite]);
   
   const removePairedUser = useCallback((userIdToRemove: string) => {
+    // First, find and remove any chats with this user
+    setChatsState(prevChats => {
+      const updatedChats = prevChats.filter(chat => !chat.participants.includes(userIdToRemove));
+      
+      // Save changes to storage
+      try {
+        localStorage.setItem('peerlink-chats', JSON.stringify(updatedChats));
+        sessionStorage.setItem('peerlink-chats-backup', JSON.stringify(updatedChats));
+      } catch (error) {
+        console.error("Error saving chats after user removal:", error);
+      }
+      
+      return updatedChats;
+    });
+    
+    // Clean up messages associated with this user
+    setMessagesState(prevMessages => {
+      const updatedMessages = { ...prevMessages };
+      
+      // Find chat IDs that contain this user
+      const chatIdsToRemove = Object.keys(updatedMessages).filter(chatId => 
+        chatId.includes(userIdToRemove)
+      );
+      
+      // Remove those chat messages
+      chatIdsToRemove.forEach(chatId => {
+        delete updatedMessages[chatId];
+      });
+      
+      // Save changes to storage
+      try {
+        localStorage.setItem('peerlink-messages', JSON.stringify(updatedMessages));
+        sessionStorage.setItem('peerlink-messages-backup', JSON.stringify(updatedMessages));
+      } catch (error) {
+        console.error("Error saving messages after user removal:", error);
+      }
+      
+      return updatedMessages;
+    });
+    
+    // Disconnect P2P connection if exists
+    if (p2pService.isConnectedToPeer(userIdToRemove)) {
+      p2pService.disconnectPeer(userIdToRemove);
+    }
+    
+    // Finally remove from paired users
     setPairedUsersState(prevPairedUsers => prevPairedUsers.filter(user => user.userId !== userIdToRemove));
-    // Note: Chats with this user are not automatically deleted to preserve history,
-    // they will just appear inactive in the chat list or can be manually cleared.
-  }, [setPairedUsersState]);
+  }, [setPairedUsersState, setChatsState, setMessagesState]);
   
   const updatePairedUserLocalDisplayName = useCallback((userId: string, localName: string) => {
     setPairedUsersState(prevPairedUsers =>

@@ -6,18 +6,28 @@ import { useAppContext } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Wifi, WifiOff, QrCode, Copy, Check, Zap, ArrowLeftRight } from 'lucide-react';
+import { Wifi, WifiOff, QrCode, Copy, Check, Zap, ArrowLeftRight, Trash2, AlertCircle } from 'lucide-react';
 import { DEFAULT_AVATAR_SVG_DATA_URI } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import * as p2pService from '@/lib/p2p';
 import { PairedUser } from '@/types';
 
 export default function P2PConnectionPage() {
-  const { userProfile, addPairedUser, pairedUsers, isInitialized, createOrGetChat } = useAppContext();
+  const { userProfile, addPairedUser, removePairedUser, pairedUsers, isInitialized, createOrGetChat } = useAppContext();
   const { toast } = useToast();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('create');
@@ -27,6 +37,8 @@ export default function P2PConnectionPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
+  const [userToRemove, setUserToRemove] = useState<PairedUser | null>(null);
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
   
   // Initialize P2P and set up event listeners
   useEffect(() => {
@@ -128,6 +140,27 @@ export default function P2PConnectionPage() {
     
     const chat = createOrGetChat(peer.userId, peer.displayName, peer.avatar);
     router.push(`/chat/messages/${chat.chatId}`);
+  };
+  
+  // Remove paired user
+  const confirmRemoveUser = (user: PairedUser, event: React.MouseEvent) => {
+    // Stop the click event from triggering the chat
+    event.stopPropagation();
+    
+    setUserToRemove(user);
+    setIsRemoveDialogOpen(true);
+  };
+  
+  const handleRemoveUser = () => {
+    if (userToRemove) {
+      removePairedUser(userToRemove.userId);
+      toast({
+        title: "User Removed",
+        description: `${userToRemove.displayName} has been removed from your connections`,
+      });
+      setUserToRemove(null);
+      setIsRemoveDialogOpen(false);
+    }
   };
 
   return (
@@ -273,13 +306,24 @@ export default function P2PConnectionPage() {
                       </div>
                     </div>
                     
-                    <Badge variant={connectedPeers.includes(user.userId) ? "default" : "outline"}>
-                      {connectedPeers.includes(user.userId) ? (
-                        <span className="flex items-center gap-1"><Wifi className="h-3 w-3" /> Online</span>
-                      ) : (
-                        <span className="flex items-center gap-1"><WifiOff className="h-3 w-3" /> Offline</span>
-                      )}
-                    </Badge>
+                    <div className="flex items-center gap-3">
+                      <Badge variant={connectedPeers.includes(user.userId) ? "default" : "outline"}>
+                        {connectedPeers.includes(user.userId) ? (
+                          <span className="flex items-center gap-1"><Wifi className="h-3 w-3" /> Online</span>
+                        ) : (
+                          <span className="flex items-center gap-1"><WifiOff className="h-3 w-3" /> Offline</span>
+                        )}
+                      </Badge>
+                      
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(e) => confirmRemoveUser(user, e)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -292,6 +336,24 @@ export default function P2PConnectionPage() {
           </p>
         </CardFooter>
       </Card>
+      
+      {/* Confirmation Dialog for Remove User */}
+      <AlertDialog open={isRemoveDialogOpen} onOpenChange={setIsRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Connection</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {userToRemove?.displayName}? This will delete all associated chats and messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToRemove(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveUser} className="bg-destructive hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
