@@ -1,0 +1,175 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  /* Default font will be set by tailwind.config.ts via .font-body on body tag */
+}
+
+@layer base {
+  :root {
+    --background: 208 33% 95.5%; /* #F0F4F7 Light Gray */
+    --foreground: 208 10% 25%; /* Dark Gray */
+
+    --card: 208 33% 99%; /* Whiter than background */
+    --card-foreground: 208 10% 25%;
+
+    --popover: 208 33% 99%;
+    --popover-foreground: 208 10% 25%;
+
+    --primary: 197 47% 63.9%; /* #72BCD4 Soft Blue */
+    --primary-foreground: 197 30% 10%; /* Dark text on primary */
+
+    --secondary: 208 30% 90%; /* Lighter gray */
+    --secondary-foreground: 208 10% 20%;
+
+    --muted: 208 25% 85%;
+    --muted-foreground: 208 10% 45%;
+
+    --accent: 196 33% 37.3%; /* #3F707F Teal */
+    --accent-foreground: 196 30% 95%; /* Light text on accent */
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 208 20% 88%;
+    --input: 208 20% 92%;
+    --ring: 197 47% 55%; /* Slightly darker/desaturated primary */
+
+    --chart-1: 197 47% 63.9%;
+    --chart-2: 196 33% 37.3%;
+    --chart-3: 208 30% 70%;
+    --chart-4: 197 40% 50%;
+    --chart-5: 196 25% 30%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar specific colors - can be adjusted or use defaults */
+    --sidebar-background: 208 25% 92%; /* Slightly different from main background */
+    --sidebar-foreground: 208 10% 25%;
+    --sidebar-primary: 197 47% 63.9%;
+    --sidebar-primary-foreground: 197 30% 10%;
+    --sidebar-accent: 196 33% 37.3%;
+    --sidebar-accent-foreground: 196 30% 95%;
+    --sidebar-border: 208 20% 85%;
+    --sidebar-ring: 197 47% 55%;
+  }
+
+  .dark {
+    --background: 208 15% 12%; /* Dark blue-gray */
+    --foreground: 208 25% 88%; /* Light gray text */
+
+    --card: 208 15% 16%;
+    --card-foreground: 208 25% 88%;
+
+    --popover: 208 15% 12%;
+    --popover-foreground: 208 25% 88%;
+
+    --primary: 197 47% 55%; /* Slightly adjusted primary for dark mode */
+    --primary-foreground: 197 25% 15%;
+
+    --secondary: 208 15% 20%;
+    --secondary-foreground: 208 25% 85%;
+
+    --muted: 208 15% 25%;
+    --muted-foreground: 208 20% 60%;
+
+    --accent: 196 33% 50%; /* Lighter accent for dark mode */
+    --accent-foreground: 196 25% 90%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 208 15% 25%;
+    --input: 208 15% 22%;
+    --ring: 197 47% 50%;
+
+    --chart-1: 197 47% 55%;
+    --chart-2: 196 33% 50%;
+    --chart-3: 208 20% 40%;
+    --chart-4: 197 35% 60%;
+    --chart-5: 196 20% 70%;
+
+    /* Sidebar specific colors - dark theme */
+    --sidebar-background: 208 15% 10%;
+    --sidebar-foreground: 208 25% 88%;
+    --sidebar-primary: 197 47% 55%;
+    --sidebar-primary-foreground: 197 25% 15%;
+    --sidebar-accent: 196 33% 50%;
+    --sidebar-accent-foreground: 196 25% 90%;
+    --sidebar-border: 208 15% 20%;
+    --sidebar-ring: 197 47% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .animate-splash-logo {
+    animation: splashLogoAnim 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+  .animate-splash-text {
+    animation: splashTextAnim 1.2s ease-out 0.5s forwards; /* Delay by 0.5s */
+  }
+  .animate-gradient-bg {
+    background: linear-gradient(
+      -45deg,
+      hsl(var(--primary) / 0.6), 
+      hsl(var(--accent) / 0.5),
+      hsl(var(--background) / 0.8), /* Blend with actual theme background */
+      hsl(var(--secondary) / 0.4)
+    );
+    background-size: 400% 400%;
+    animation: glowingBackgroundAnim 12s ease infinite; /* Slightly faster for more dynamism */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* z-index is handled by 'isolate' on parent and 'z-10' on content */
+  }
+}
+
+@keyframes splashLogoAnim {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0px);
+  }
+}
+
+@keyframes splashTextAnim {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glowingBackgroundAnim {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
